@@ -1,0 +1,7 @@
+__pycache__/
+celeba-hq/
+log_images/
+log_images_tvanilla/
+lightning_logs/
+inception/
+dit_saved.pth

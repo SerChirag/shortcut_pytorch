@@ -1,0 +1,25 @@
+services:
+  shortcut_pytorch:
+    image: rkhafizov.shortcut_pytorch_image
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rkhafizov.shortcut_pytorch_container
+    network_mode: host
+    ipc: host
+    volumes:
+      - /home/r.khafizov/shortcut_pytorch:/workspace/shortcut_pytorch
+      - /home/r.khafizov/shortcut_pytorch/inception:/root/.cache/torch/hub/checkpoints
+    ports:
+      - "6666:6666"  # Adjust the port mapping as needed
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all  # Adjust GPU visibility as needed
+    command: "/bin/bash -c 'source /etc/bash.bashrc && tail -f /dev/null && /bin/bash'"  # Keep container running
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            # count: 1
+            device_ids: ["1, 2, 3"]
+            capabilities: [gpu]
