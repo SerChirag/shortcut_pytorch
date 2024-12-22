@@ -1,5 +1,3 @@
-from diffusers.models import AutoencoderKL
-
 from PIL import Image
 import numpy as np
 import pandas as pd
@@ -8,7 +6,6 @@ import os
 from copy import deepcopy
 from collections import OrderedDict
 import math
-
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -20,9 +17,12 @@ from torchvision.utils import save_image
 
 from torchmetrics.image.fid import FrechetInceptionDistance
 
+from diffusers.models import AutoencoderKL
+
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.callbacks import Callback
+from pytorch_lightning.loggers import TensorBoardLogger
+
 
 from model import DiT_B_2, EMACallback
 from utils import create_targets, create_targets_naive
@@ -270,11 +270,17 @@ def main_lightning():
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                                 ])
 
+    # 28000 images
     train_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/train', transform=train_transform)
+    # 2000 images 
     val_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/val', transform=train_transform)
+
+    
 
     print(f"len(train_dataset): {len(train_dataset)}")
     print(f"len(val_dataset): {len(val_dataset)}")
+
+    
 
     # good option is 2*num_gpus
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, drop_last=True)
@@ -308,15 +314,17 @@ def main_lightning():
     callbacks.append(checkpoint_callback)
     callbacks.append(ema_callback)
 
+    logger = TensorBoardLogger("tb_logs", name="shortcut_model")
 
     trainer = pl.Trainer(max_epochs=500,
                          accelerator="gpu",
                          num_sanity_val_steps=1,
-                         check_val_every_n_epoch=5,
+                         check_val_every_n_epoch=1,
                          limit_val_batches=1,
-                         devices=[0, 1, 2],
-                         strategy="ddp_find_unused_parameters_true",
-                         callbacks=callbacks)
+                         devices=[0, 2],
+                         strategy="ddp_find_unused_parameters_false",
+                         callbacks=callbacks,
+                         logger=logger)
     
     trainer.fit(model=dit, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

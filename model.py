@@ -16,6 +16,8 @@ import math
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
 
 import pytorch_lightning as pl
+from pytorch_lightning.utilities.types import STEP_OUTPUT
+
 
 from torchmetrics.image.fid import FrechetInceptionDistance
 import matplotlib.pyplot as plt
@@ -552,6 +554,22 @@ class DiT(pl.LightningModule):
 
         self.training_type = training_type
 
+        # number of denoising steps to be applied
+        self.denoise_timesteps = [1, 2, 4, 8, 16, 32, 128]
+
+        # self.fid = FrechetInceptionDistance().to(self.device)
+
+        self.fids = None
+        self.validation_step_outputs = []
+        
+
+        
+
+    def on_fit_start(self):
+
+        self.fids = [FrechetInceptionDistance().to(self.device) for _ in range(len(self.denoise_timesteps))]
+
+
     def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):
@@ -653,49 +671,43 @@ class DiT(pl.LightningModule):
         v_prime = self.forward(x_t, t, dt_base, labels)
 
         loss = self.loss_fn(v_prime, v_t)
-        self.log("train_loss", loss, on_epoch=True, on_step=False)
+        self.log("train_loss", loss, on_epoch=True, on_step=False, sync_dist=True)
 
         return loss
     
     def validation_step(self, batch, batch_idx):
 
-        # self.ema.apply_shadow(self)
-
         images, labels_real = batch
-        # images, labels = images.to(self.device), labels.to(self.device)
 
         labels_uncond = torch.ones_like(labels_real, dtype=torch.int32) * NUM_CLASSES
 
-        # labels_uncond = shard_data(jnp.ones(batch_labels.shape, dtype=jnp.int32) * FLAGS.model['num_classes']) # Null token
 
         with torch.no_grad():
             latents = self.vae.encode(images).latent_dist.sample()
             latents = latents * self.vae.config.scaling_factor
 
-        fid = FrechetInceptionDistance().to(self.device)
-        # fid = FrechetInceptionDistance()
 
         # normalize to [0,255] range
         images = 255 * ((images - torch.min(images)) / (torch.max(images) - torch.min(images) + 1e-8))
 
         # sample noise
-        # eps = torch.randn_like(latents).to(self.device)
+        eps_i = torch.randn_like(latents).to(self.device)
 
-        denoise_timesteps_list = [1, 2, 4, 8, 16, 32, 128]
+        # denoise_timesteps_list = [1, 2, 4, 8, 16, 32, 128]
 
-        for i, denoise_timesteps in enumerate(denoise_timesteps_list):
+        for i, denoise_timesteps in enumerate(self.denoise_timesteps):
 
             all_x = []
             delta_t = 1.0 / denoise_timesteps # i.e. step size
-            fid.reset()
+            # self.fid.reset()
 
-            x = self.eps.to(self.device)
+            x = eps_i.to(self.device)
 
             for ti in range(denoise_timesteps):
                 # t should in range [0,1]
                 t = ti / denoise_timesteps
 
-                t_vector = torch.full((self.eps.shape[0],), t).to(self.device)
+                t_vector = torch.full((eps_i.shape[0],), t).to(self.device)
                 # t_vector = torch.full((eps.shape[0],), t)
                 dt_base = torch.ones_like(t_vector).to(self.device) * math.log2(denoise_timesteps)
                 # dt_base = torch.ones_like(t_vector) * math.log2(denoise_timesteps)
@@ -734,30 +746,76 @@ class DiT(pl.LightningModule):
             decoded_denormalized = 255 * ((decoded - torch.min(decoded)) / (torch.max(decoded)-torch.min(decoded)+1e-8))
             
             # generated images
-            fid.update(images.to(torch.uint8), real=True)
-            fid.update(decoded_denormalized.to(torch.uint8).to(self.device), real=False)
-            # fid.update(decoded_denormalized.to(torch.uint8), real=False)
-            fid_val = fid.compute()
-            print(f"denoise_timesteps: {denoise_timesteps} | fid_val: {fid_val}")
+            self.fids[i].update(images.to(torch.uint8).to(self.device), real=True)
+            self.fids[i].update(decoded_denormalized.to(torch.uint8).to(self.device), real=False)
 
 
-            all_x = torch.stack(all_x)
-            # print(f"all_x.shape: {all_x.shape}")
+            # fid_val = fid.compute()
 
-            def process_img(img):
-                # normalize in range [0,1]
-                img = img*0.5 + 0.5
-                img = torch.clip(img, 0, 1)
-                img = img.permute(1,2,0)
-                return img
-        
-            fig, axs = plt.subplots(8, 8, figsize=(30,30))
-            for t in range(min(8, all_x.shape[0])):
-                for j in range(8):        
-                    axs[t, j].imshow(process_img(all_x[t, j]), vmin=0, vmax=1)
+            # log only a single batch of generated images and only on first device
+            if self.trainer.is_global_zero and batch_idx == 0:
+
+                all_x = torch.stack(all_x)
+
+                def process_img(img):
+                    # normalize in range [0,1]
+                    img = img*0.5 + 0.5
+                    img = torch.clip(img, 0, 1)
+                    img = img.permute(1,2,0)
+                    return img
             
-            fig.savefig(f"log_images/epoch:{self.trainer.current_epoch}_denoise_timesteps:{denoise_timesteps}.png")
-            plt.close()
+                fig, axs = plt.subplots(8, 8, figsize=(30,30))
+                for t in range(min(8, all_x.shape[0])):
+                    for j in range(8):        
+                        axs[t, j].imshow(process_img(all_x[t, j]), vmin=0, vmax=1)
+                
+                fig.savefig(f"log_images2/epoch:{self.trainer.current_epoch}_denoise_timesteps:{denoise_timesteps}.png")
+
+                # self.logger.experiment.add_figure(f"epoch:{self.trainer.current_epoch}_denoise_timesteps:{denoise_timesteps}", fig, global_step=self.global_step)
+                self.logger.experiment.add_figure(f"denoise_timesteps:{denoise_timesteps}", fig, global_step=self.global_step)
+
+                plt.close()
+
+        return 0
+
+            
+    # def validation_epoch_start(self,):
+
+    #     if self.trainer.is_global_zero:
+
+    #         self.fid.reset()
+
+    def on_validation_epoch_end(self):
+        # if self.trainer.is_global_zero:
+        for i in range(len(self.fids)):
+            denoise_timesteps_i = self.denoise_timesteps[i]
+            
+            # Compute FID for the current timestep
+            fid_val_i = self.fids[i].compute()
+            self.fids[i].reset()
+            
+            # print(f"i: {i} | fid_val_i: {fid_val_i}")
+
+            # Log the FID value
+            self.log(f"[FID] denoise_steps: {denoise_timesteps_i}", fid_val_i, on_epoch=True, on_step=False, sync_dist=True)
+
+
+    # def on_validation_epoch_end(self, outputs):
+
+    #     if self.trainer.is_global_zero:
+
+    #         for i in range(len(self.fids)):
+
+    #             denoise_timesteps_i = self.denoise_timesteps[i]
+
+    #             fid_val_i = self.fids[i].compute()
+
+    #             self.fids[i].reset()
+
+    #             self.log(f"steps: {denoise_timesteps_i}", fid_val_i, on_epoch=True, on_step=False)
+
+            # fid_val = self.fid.compute()
+            # self.fid.reset()
 
     def configure_optimizers(self):
 

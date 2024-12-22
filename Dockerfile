@@ -24,4 +24,10 @@ RUN pip install accelerate==1.2.0 \
     && pip install matplotlib \
     && pip install pandas==2.2.3 \
     && pip install fastparquet==2024.11.0 \
-    && pip install pytorch-lightning
+    && pip install pytorch-lightning \
+    && pip install tensorboard
+
+# visualize logs(on server):
+tensorboard --logdir=lightning_logs/ --port 6006
+# on own pc:
+ssh -N -f -L localhost:16006:localhost:6006 r.khafizov@10.16.90.17
