@@ -24,8 +24,8 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks import Callback
 
-from model import DiT_B_2
-from utils import create_targets
+from model import DiT_B_2, EMACallback
+from utils import create_targets, create_targets_naive
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -303,11 +303,13 @@ def main_lightning():
         filename="model-{epoch:02d}",
         save_last=True,
     )
+    ema_callback = EMACallback(decay=0.999)
     
     callbacks.append(checkpoint_callback)
+    callbacks.append(ema_callback)
 
 
-    trainer = pl.Trainer(max_epochs=300,
+    trainer = pl.Trainer(max_epochs=500,
                          accelerator="gpu",
                          num_sanity_val_steps=1,
                          check_val_every_n_epoch=5,
