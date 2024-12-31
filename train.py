@@ -21,7 +21,7 @@ from diffusers.models import AutoencoderKL
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 
 from model import DiT_B_2, EMACallback
@@ -259,10 +259,7 @@ def main_lightning():
     
     
     
-    # if load from checkpoint:
-    # checkpoint_path = "/workspace/shortcut_pytorch/lightning_logs/version_11/checkpoints/last.ckpt"
-    # checkpoint = torch.load(checkpoint_path)
-    # dit.load_state_dict(checkpoint['state_dict'])    
+    
 
 
     train_transform = transforms.Compose([
@@ -297,10 +294,14 @@ def main_lightning():
                   class_dropout_prob=CLASS_DROPOUT_PROB,
                   lightning_mode=True,
                   latent_shape=latent_shape,
-                  training_type="naive")
+                  training_type="shortcut")
+
+    # if load from checkpoint:
+    # checkpoint_path = "/workspace/shortcut_pytorch/tb_logs/shortcut_model/version_0/checkpoints/last.ckpt"
+    # checkpoint = torch.load(checkpoint_path)
+    # dit.load_state_dict(checkpoint['state_dict'])    
 
     print(f"count_parameters(dit): {count_parameters(dit)}")
-
 
     callbacks = []
 
@@ -314,14 +315,15 @@ def main_lightning():
     callbacks.append(checkpoint_callback)
     callbacks.append(ema_callback)
 
-    logger = TensorBoardLogger("tb_logs", name="shortcut_model")
+    # logger = TensorBoardLogger("tb_logs", name="shortcut_model")
+    logger = WandbLogger("shortcut_model")
 
-    trainer = pl.Trainer(max_epochs=500,
+    trainer = pl.Trainer(max_epochs=1000,
                          accelerator="gpu",
                          num_sanity_val_steps=1,
-                         check_val_every_n_epoch=1,
-                         limit_val_batches=1,
-                         devices=[0, 2],
+                         check_val_every_n_epoch=50,
+                         limit_val_batches=1.0,
+                         devices=[0, 1, 2, 3],
                          strategy="ddp_find_unused_parameters_false",
                          callbacks=callbacks,
                          logger=logger)
@@ -356,7 +358,7 @@ def main():
                   num_classes=NUM_CLASSES, 
                   class_dropout_prob=CLASS_DROPOUT_PROB,
                   latent_shape=latent_shape,
-                  training_type="naive").to(DEVICE)
+                  training_type="shortcut").to(DEVICE)
 
     vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(DEVICE)
     vae = vae.eval()

@@ -5,4 +5,5 @@ log_images_tvanilla/
 lightning_logs/
 inception/
 tb_logs/
+wandb/
 dit_saved.pth

@@ -25,9 +25,13 @@ RUN pip install accelerate==1.2.0 \
     && pip install pandas==2.2.3 \
     && pip install fastparquet==2024.11.0 \
     && pip install pytorch-lightning \
-    && pip install tensorboard
+    && pip install tensorboard \
+    && pip install wandb
 
-# visualize logs(on server):
-tensorboard --logdir=lightning_logs/ --port 6006
-# on own pc:
-ssh -N -f -L localhost:16006:localhost:6006 r.khafizov@10.16.90.17
+# 1. visualize logs(on server):
+# tensorboard --logdir=tb_logs/shortcut_model --port 6006
+# 2. on own pc:
+# ssh -N -f -L localhost:16006:localhost:6006 r.khafizov@10.16.88.93 
+# if port is already in use, do:
+    # 1. sudo netstat -tulpn | grep :16006
+    # 2. kill observed process id `kill "id"`

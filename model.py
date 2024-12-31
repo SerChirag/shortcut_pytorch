@@ -14,6 +14,7 @@ import torch.nn as nn
 import numpy as np
 import math
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
+from os import makedirs
 
 import pytorch_lightning as pl
 from pytorch_lightning.utilities.types import STEP_OUTPUT
@@ -33,6 +34,7 @@ from typing import Iterable, Optional
 import weakref
 import copy
 import contextlib
+import wandb
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
@@ -562,7 +564,7 @@ class DiT(pl.LightningModule):
         self.fids = None
         self.validation_step_outputs = []
         
-
+        makedirs("log_images3", exist_ok=True)
         
 
     def on_fit_start(self):
@@ -769,10 +771,14 @@ class DiT(pl.LightningModule):
                     for j in range(8):        
                         axs[t, j].imshow(process_img(all_x[t, j]), vmin=0, vmax=1)
                 
-                fig.savefig(f"log_images2/epoch:{self.trainer.current_epoch}_denoise_timesteps:{denoise_timesteps}.png")
+                
+                fig.savefig(f"log_images3/epoch:{self.trainer.current_epoch}_denoise_timesteps:{denoise_timesteps}.png")
 
                 # self.logger.experiment.add_figure(f"epoch:{self.trainer.current_epoch}_denoise_timesteps:{denoise_timesteps}", fig, global_step=self.global_step)
-                self.logger.experiment.add_figure(f"denoise_timesteps:{denoise_timesteps}", fig, global_step=self.global_step)
+                # self.logger.experiment.add_figure(f"denoise_timesteps:{denoise_timesteps}", fig, global_step=self.global_step)
+
+                self.logger.experiment.log({f"denoise_timesteps:{denoise_timesteps}" : [wandb.Image(fig)]})
+                # log_image(key=f"denoise_timesteps:{denoise_timesteps}", images=wandb.Image(fig))
 
                 plt.close()
 
