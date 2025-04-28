@@ -23,7 +23,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
-
+from torchvision.datasets import ImageFolder
 from model import DiT_B_2, EMACallback
 from utils import create_targets, create_targets_naive
 
@@ -267,10 +267,13 @@ def main_lightning():
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                                 ])
 
-    # 28000 images
-    train_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/train', transform=train_transform)
-    # 2000 images 
-    val_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/val', transform=train_transform)
+    # # 28000 images
+    # train_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/train', transform=train_transform)
+    # # 2000 images 
+    # val_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/val', transform=train_transform)
+
+    train_dataset = ImageFolder('/home/cva19/Desktop/AdaIMLE/datasets/pokemon', transform=train_transform)
+    val_dataset = ImageFolder('/home/cva19/Desktop/AdaIMLE/datasets/pokemon', transform=train_transform)
 
     
 
@@ -318,12 +321,12 @@ def main_lightning():
     # logger = TensorBoardLogger("tb_logs", name="shortcut_model")
     logger = WandbLogger("shortcut_model")
 
-    trainer = pl.Trainer(max_epochs=1000,
+    trainer = pl.Trainer(max_epochs=2000,
                          accelerator="gpu",
                          num_sanity_val_steps=1,
-                         check_val_every_n_epoch=50,
+                         check_val_every_n_epoch=500,
                          limit_val_batches=1.0,
-                         devices=[0, 1, 2, 3],
+                         devices=[0, 1],
                          strategy="ddp_find_unused_parameters_false",
                          callbacks=callbacks,
                          logger=logger)
@@ -339,8 +342,11 @@ def main():
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                                 ])
 
-    train_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/train', transform=train_transform)
-    val_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/val', transform=train_transform)
+    # train_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/train', transform=train_transform)
+    # val_dataset = CelebaHQDataset('/workspace/shortcut_pytorch/celeba-hq/data/val', transform=train_transform)
+
+    train_dataset = ImageFolder('/home/cva19/Desktop/AdaIMLE/datasets/pokemon', transform=train_transform)
+    val_dataset = ImageFolder('/home/cva19/Desktop/AdaIMLE/datasets/pokemon', transform=train_transform)
 
     print(f"len(train_dataset): {len(train_dataset)}")
     print(f"len(val_dataset): {len(val_dataset)}")
